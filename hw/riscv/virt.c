@@ -44,6 +44,7 @@
 #include "hw/intc/riscv_aplic.h"
 #include "hw/intc/sifive_plic.h"
 #include "hw/misc/sifive_test.h"
+#include "hw/misc/espi.h"
 #include "hw/core/platform-bus.h"
 #include "chardev/char.h"
 #include "system/device_tree.h"
@@ -102,6 +103,7 @@ static const MemMapEntry virt_memmap[] = {
     [VIRT_PCIE_ECAM] =    { 0x30000000,    0x10000000 },
     [VIRT_PCIE_MMIO] =    { 0x40000000,    0x40000000 },
     [VIRT_DRAM] =         { 0x80000000,           0x0 },
+    [VIRT_ESPI] =         {   0x102000,          0x14 },
 };
 
 /* PCIe high mmio is fixed for RV32 */
@@ -996,6 +998,28 @@ static void create_fdt_rtc(RISCVVirtState *s,
     }
 }
 
+static void create_fdt_espi(RISCVVirtState *s,
+                            uint32_t irq_mmio_phandle)
+{
+    g_autofree char *name = NULL;
+    MachineState *ms = MACHINE(s);
+
+    name = g_strdup_printf("/soc/espi@%"HWADDR_PRIx,
+                           s->memmap[VIRT_ESPI].base);
+    qemu_fdt_add_subnode(ms->fdt, name);
+    qemu_fdt_setprop_string(ms->fdt, name, "compatible", "qemu,espi");
+    qemu_fdt_setprop_sized_cells(ms->fdt, name, "reg",
+                                 2, s->memmap[VIRT_ESPI].base,
+                                 2, s->memmap[VIRT_ESPI].size);
+    qemu_fdt_setprop_cell(ms->fdt, name, "interrupt-parent",
+        irq_mmio_phandle);
+    if (s->aia_type == VIRT_AIA_TYPE_NONE) {
+        qemu_fdt_setprop_cell(ms->fdt, name, "interrupts", ESPI_IRQ);
+    } else {
+        qemu_fdt_setprop_cells(ms->fdt, name, "interrupts", ESPI_IRQ, 0x4);
+    }
+}
+
 static void create_fdt_flash(RISCVVirtState *s)
 {
     MachineState *ms = MACHINE(s);
@@ -1143,6 +1167,8 @@ static void finalize_fdt(RISCVVirtState *s)
     create_fdt_uart(s, irq_mmio_phandle);
 
     create_fdt_rtc(s, irq_mmio_phandle);
+
+    create_fdt_espi(s, irq_mmio_phandle);
 }
 
 static void create_fdt(RISCVVirtState *s)
@@ -1700,6 +1726,20 @@ static void virt_machine_init(MachineState *machine)
 
     sysbus_create_simple("goldfish_rtc", s->memmap[VIRT_RTC].base,
         qdev_get_gpio_in(mmio_irqchip, RTC_IRQ));
+
+    /* eSPI device (shared memory + VWires over chardev socket) */
+    {
+        DeviceState *espi_dev = qdev_new(TYPE_ESPI);
+        Chardev *espi_chr = qemu_chr_find("espi0");
+        if (espi_chr) {
+            qdev_prop_set_chr(espi_dev, "chardev", espi_chr);
+        }
+        sysbus_realize_and_unref(SYS_BUS_DEVICE(espi_dev), &error_fatal);
+        sysbus_mmio_map(SYS_BUS_DEVICE(espi_dev), 0,
+                        s->memmap[VIRT_ESPI].base);
+        sysbus_connect_irq(SYS_BUS_DEVICE(espi_dev), 0,
+                           qdev_get_gpio_in(mmio_irqchip, ESPI_IRQ));
+    }
 
     for (i = 0; i < ARRAY_SIZE(s->flash); i++) {
         /* Map legacy -drive if=pflash to machine properties */
