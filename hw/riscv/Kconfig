@@ -41,6 +41,14 @@ config OPENTITAN
     select SIFIVE_PLIC
     select UNIMP
 
+config RISCV_EC
+    bool
+    default y
+    depends on RISCV32
+    select SERIAL_MM
+    select RISCV_ACLINT
+    select SIFIVE_PLIC
+
 config RISCV_VIRT
     bool
     default y
