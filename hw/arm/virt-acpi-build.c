@@ -118,6 +118,87 @@ static void acpi_dsdt_add_i2c(Aml *scope, const MemMapEntry *i2c_memmap,
     aml_append(scope, dev);
 }
 
+static void acpi_dsdt_add_odp_gpio(Aml *scope, const MemMapEntry *gpio_memmap,
+                                   uint32_t gpio_irq)
+{
+    Aml *dev = aml_device("GPO1");
+    aml_append(dev, aml_name_decl("_HID", aml_string("ODP0002")));
+    aml_append(dev, aml_name_decl("_UID", aml_int(0)));
+
+    Aml *crs = aml_resource_template();
+    aml_append(crs, aml_memory32_fixed(gpio_memmap->base,
+                                       gpio_memmap->size, AML_READ_WRITE));
+    aml_append(crs,
+               aml_interrupt(AML_CONSUMER, AML_LEVEL, AML_ACTIVE_HIGH,
+                             AML_EXCLUSIVE, &gpio_irq, 1));
+    aml_append(dev, aml_name_decl("_CRS", crs));
+
+    aml_append(scope, dev);
+}
+
+/*
+ * HID-over-I2C keyboard exposed by the embedded controller (EC).  The slave
+ * address and the HID descriptor register address must match the EC firmware's
+ * I2C-HID implementation.
+ */
+#define VIRT_I2C_HID_ADDR       0x42
+#define VIRT_I2C_HID_DESC_ADDR  0x0001
+
+/* HID-over-I2C _DSM (Microsoft): function 1 returns the HID descriptor addr. */
+static Aml *build_i2c_hid_dsm_method(uint16_t hid_desc_addr)
+{
+    Aml *method = aml_method("_DSM", 4, AML_NOTSERIALIZED);
+    Aml *ifctx, *ifctx1, *ifctx2;
+    uint8_t supported[1] = { 0x03 }; /* functions 0 and 1 supported */
+    uint8_t empty[1] = { 0x00 };
+
+    ifctx = aml_if(aml_equal(aml_arg(0),
+                   aml_touuid("3CDFF6F7-4267-4555-AD05-B30A3D8938DE")));
+    {
+        /* Function 0: query which functions are supported. */
+        ifctx1 = aml_if(aml_equal(aml_arg(2), aml_int(0)));
+        aml_append(ifctx1, aml_return(aml_buffer(sizeof(supported), supported)));
+        aml_append(ifctx, ifctx1);
+
+        /* Function 1: the HID descriptor register address. */
+        ifctx2 = aml_if(aml_equal(aml_arg(2), aml_int(1)));
+        aml_append(ifctx2, aml_return(aml_int(hid_desc_addr)));
+        aml_append(ifctx, ifctx2);
+    }
+    aml_append(method, ifctx);
+
+    /* Unknown UUID/function. */
+    aml_append(method, aml_return(aml_buffer(sizeof(empty), empty)));
+    return method;
+}
+
+/*
+ * Declare the HID-over-I2C keyboard living in the EC.  It rides the
+ * odp-i2c-controller (\_SB.I2C0) for data and is wired for "input report
+ * ready" interrupts on pin 0 of the odp-gpio controller (\_SB.GPO1).
+ */
+static void acpi_dsdt_add_i2c_hid(Aml *scope)
+{
+    Aml *dev = aml_device("HIDK");
+    Aml *crs;
+    const uint32_t gpio_pin = 0;
+
+    aml_append(dev, aml_name_decl("_HID", aml_string("PNP0C50")));
+    aml_append(dev, aml_name_decl("_CID", aml_string("PNP0C50")));
+    aml_append(dev, aml_name_decl("_UID", aml_int(0)));
+
+    crs = aml_resource_template();
+    aml_append(crs, aml_i2c_serial_bus_device(VIRT_I2C_HID_ADDR, "\\_SB.I2C0"));
+    aml_append(crs, aml_gpio_int(AML_CONSUMER, AML_LEVEL, AML_ACTIVE_LOW,
+                                 AML_EXCLUSIVE, AML_PULL_UP, 0,
+                                 &gpio_pin, 1, "\\_SB.GPO1", NULL, 0));
+    aml_append(dev, aml_name_decl("_CRS", crs));
+
+    aml_append(dev, build_i2c_hid_dsm_method(VIRT_I2C_HID_DESC_ADDR));
+
+    aml_append(scope, dev);
+}
+
 static void acpi_dsdt_add_flash(Aml *scope, const MemMapEntry *flash_memmap)
 {
     Aml *dev, *crs;
@@ -1175,6 +1256,9 @@ build_dsdt(GArray *table_data, BIOSLinker *linker, VirtMachineState *vms)
     }
     acpi_dsdt_add_i2c(scope, &memmap[VIRT_I2C],
                       (irqmap[VIRT_I2C] + ARM_SPI_BASE));
+    acpi_dsdt_add_odp_gpio(scope, &memmap[VIRT_ODP_GPIO],
+                           (irqmap[VIRT_ODP_GPIO] + ARM_SPI_BASE));
+    acpi_dsdt_add_i2c_hid(scope);
     if (vmc->acpi_expose_flash) {
         acpi_dsdt_add_flash(scope, &memmap[VIRT_FLASH]);
     }
