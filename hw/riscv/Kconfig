@@ -48,6 +48,8 @@ config RISCV_EC
     select SERIAL_MM
     select RISCV_ACLINT
     select SIFIVE_PLIC
+    select ODP_I2C_CONTROLLER
+    select ODP_I2C_TARGET
 
 config RISCV_VIRT
     bool

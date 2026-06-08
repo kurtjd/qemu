@@ -1,0 +1,5 @@
+config ODP_I2C_CONTROLLER
+    bool
+
+config ODP_I2C_TARGET
+    bool

@@ -16,12 +16,16 @@
 #include "hw/core/boards.h"
 #include "hw/core/loader.h"
 #include "hw/core/sysbus.h"
+#include "hw/core/qdev-properties.h"
 #include "hw/char/serial-mm.h"
 #include "hw/riscv/riscv_hart.h"
 #include "hw/riscv/ec.h"
 #include "hw/riscv/machines-qom.h"
 #include "hw/intc/riscv_aclint.h"
 #include "hw/intc/sifive_plic.h"
+#include "hw/odp/i2c-controller.h"
+#include "hw/odp/i2c-target.h"
+#include "chardev/char.h"
 #include "system/system.h"
 #include "elf.h"
 
@@ -29,6 +33,8 @@ static const MemMapEntry ec_memmap[] = {
     [EC_CLINT] = { 0x02000000,      0x10000 },
     [EC_PLIC]  = { 0x0C000000, EC_PLIC_SIZE },
     [EC_UART0] = { 0x10000000,       0x1000 },
+    [EC_I2C0]  = { 0x10001000,       0x1000 },
+    [EC_I2C_TARGET] = { 0x10002000,  0x1000 },
     [EC_RAM]   = { 0x80000000,          0x0 },
 };
 
@@ -153,6 +159,40 @@ static void ec_machine_init(MachineState *machine)
     serial_mm_init(system_memory, s->memmap[EC_UART0].base, 0,
                    qdev_get_gpio_in(s->plic, EC_UART0_IRQ),
                    399193, serial_hd(0), DEVICE_LITTLE_ENDIAN);
+
+    /*
+     * Socket-backed I2C controller. The chardev backend is optional: if the
+     * user did not supply '-chardev socket,id=ec-i2c-controller,...' the
+     * device still maps and simply has no peer until one is attached.
+     */
+    s->i2c0 = qdev_new(TYPE_ODP_I2C_CONTROLLER);
+    {
+        Chardev *i2c_chr = qemu_chr_find("ec-i2c-controller");
+        if (i2c_chr) {
+            qdev_prop_set_chr(s->i2c0, "chardev", i2c_chr);
+        }
+    }
+    sysbus_realize_and_unref(SYS_BUS_DEVICE(s->i2c0), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(s->i2c0), 0, s->memmap[EC_I2C0].base);
+    sysbus_connect_irq(SYS_BUS_DEVICE(s->i2c0), 0,
+                       qdev_get_gpio_in(s->plic, EC_I2C0_IRQ));
+
+    /*
+     * Socket-backed I2C target. Like the controller, its chardev backend is
+     * optional and looked up by id ('-chardev socket,id=ec-i2c-target,...').
+     */
+    s->i2c_target = qdev_new(TYPE_ODP_I2C_TARGET);
+    {
+        Chardev *tgt_chr = qemu_chr_find("ec-i2c-target");
+        if (tgt_chr) {
+            qdev_prop_set_chr(s->i2c_target, "chardev", tgt_chr);
+        }
+    }
+    sysbus_realize_and_unref(SYS_BUS_DEVICE(s->i2c_target), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(s->i2c_target), 0,
+                    s->memmap[EC_I2C_TARGET].base);
+    sysbus_connect_irq(SYS_BUS_DEVICE(s->i2c_target), 0,
+                       qdev_get_gpio_in(s->plic, EC_I2C_TARGET_IRQ));
 
     /* Firmware loading happens in machine_done */
     s->machine_done.notify = ec_machine_done;

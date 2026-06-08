@@ -26,6 +26,7 @@ source nitro/Kconfig
 source nubus/Kconfig
 source nvme/Kconfig
 source nvram/Kconfig
+source odp/Kconfig
 source pci-bridge/Kconfig
 source pci-host/Kconfig
 source pci/Kconfig
