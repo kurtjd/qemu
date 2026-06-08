@@ -50,6 +50,7 @@ config RISCV_EC
     select SIFIVE_PLIC
     select ODP_I2C_CONTROLLER
     select ODP_I2C_TARGET
+    select ODP_GPIO
 
 config RISCV_VIRT
     bool

@@ -25,6 +25,7 @@
 #include "hw/intc/sifive_plic.h"
 #include "hw/odp/i2c-controller.h"
 #include "hw/odp/i2c-target.h"
+#include "hw/odp/gpio.h"
 #include "chardev/char.h"
 #include "system/system.h"
 #include "elf.h"
@@ -35,6 +36,7 @@ static const MemMapEntry ec_memmap[] = {
     [EC_UART0] = { 0x10000000,       0x1000 },
     [EC_I2C0]  = { 0x10001000,       0x1000 },
     [EC_I2C_TARGET] = { 0x10002000,  0x1000 },
+    [EC_GPIO]  = { 0x10003000,       0x1000 },
     [EC_RAM]   = { 0x80000000,          0x0 },
 };
 
@@ -193,6 +195,23 @@ static void ec_machine_init(MachineState *machine)
                     s->memmap[EC_I2C_TARGET].base);
     sysbus_connect_irq(SYS_BUS_DEVICE(s->i2c_target), 0,
                        qdev_get_gpio_in(s->plic, EC_I2C_TARGET_IRQ));
+
+    /*
+     * Socket-backed bidirectional GPIO controller. Pin 0 is bridged to a peer
+     * over a chardev looked up by id ('-chardev socket,id=ec-gpio0,...'); the
+     * backend is optional and the device still maps without a peer attached.
+     */
+    s->gpio0 = qdev_new(TYPE_ODP_GPIO);
+    {
+        Chardev *gpio_chr = qemu_chr_find("ec-gpio0");
+        if (gpio_chr) {
+            qdev_prop_set_chr(s->gpio0, "gpio0", gpio_chr);
+        }
+    }
+    sysbus_realize_and_unref(SYS_BUS_DEVICE(s->gpio0), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(s->gpio0), 0, s->memmap[EC_GPIO].base);
+    sysbus_connect_irq(SYS_BUS_DEVICE(s->gpio0), 0,
+                       qdev_get_gpio_in(s->plic, EC_GPIO_IRQ));
 
     /* Firmware loading happens in machine_done */
     s->machine_done.notify = ec_machine_done;
