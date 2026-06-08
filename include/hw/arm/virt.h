@@ -97,6 +97,7 @@ enum {
     VIRT_NVDIMM_ACPI,
     VIRT_PVTIME,
     VIRT_ACPI_PCIHP,
+    VIRT_I2C,
     VIRT_LOWMEMMAP_LAST,
 };
 
