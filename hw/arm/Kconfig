@@ -37,6 +37,7 @@ config ARM_VIRT
     select ACPI_CXL
     select ACPI_HMAT
     select ODP_I2C_CONTROLLER
+    select ODP_GPIO
 
 config CUBIEBOARD
     bool
@@ -192,6 +193,7 @@ config SBSA_REF
     select IDE_BUS
     select IDE_DEV
     select ODP_I2C_CONTROLLER
+    select ODP_GPIO
 
 config SABRELITE
     bool
