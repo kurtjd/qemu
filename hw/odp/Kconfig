@@ -6,3 +6,6 @@ config ODP_I2C_TARGET
 
 config ODP_GPIO
     bool
+
+config ODP_PL061
+    bool

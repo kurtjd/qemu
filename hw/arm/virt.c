@@ -95,7 +95,7 @@
 #include "hw/cxl/cxl.h"
 #include "hw/cxl/cxl_host.h"
 #include "hw/odp/i2c-controller.h"
-#include "hw/odp/gpio.h"
+#include "hw/odp/pl061.h"
 #include "chardev/char.h"
 #include "qemu/guest-random.h"
 
@@ -214,7 +214,6 @@ static const MemMapEntry base_memmap[] = {
     [VIRT_SECURE_GPIO] =        { 0x090b0000, 0x00001000 },
     [VIRT_ACPI_PCIHP] =         { 0x090c0000, ACPI_PCIHP_SIZE },
     [VIRT_I2C] =                { 0x090d0000, 0x00001000 },
-    [VIRT_ODP_GPIO] =           { 0x090e0000, 0x00001000 },
     [VIRT_MMIO] =               { 0x0a000000, 0x00000200 },
     /* ...repeating for a total of NUM_VIRTIO_TRANSPORTS, each of that size */
     [VIRT_PLATFORM_BUS] =       { 0x0c000000, 0x02000000 },
@@ -267,7 +266,6 @@ static const int a15irqmap[] = {
     [VIRT_UART1] = 8,
     [VIRT_ACPI_GED] = 9,
     [VIRT_I2C] = 10,
-    [VIRT_ODP_GPIO] = 11,
     [VIRT_MMIO] = 16, /* ...to 16 + NUM_VIRTIO_TRANSPORTS - 1 */
     [VIRT_GIC_V2M] = 48, /* ...to 48 + NUM_GICV2M_SPIS - 1 */
     [VIRT_SMMU] = 74,    /* ...to 74 + NUM_SMMU_IRQS - 1 */
@@ -1615,39 +1613,56 @@ static void create_i2c(const VirtMachineState *vms, MemoryRegion *mem)
 }
 
 /*
- * Socket-backed bidirectional GPIO controller. Each pin is bridged to a peer
- * over its own chardev, looked up by id ('-chardev socket,id=gpio0,...' for
- * pin 0). The backends are optional: pins without an attached chardev simply
- * have no peer. Only pin 0's chardev is wired here for now.
+ * Socket-backed PL061 GPIO controller. It presents the exact PL061 MMIO and
+ * interrupt interface (so an unmodified guest PL061 driver binds), but each of
+ * its eight lines is bridged to a peer over its own chardev, looked up by id
+ * ('-chardev socket,id=gpio0,...' for pin 0). The backends are optional: pins
+ * without an attached chardev simply have no peer. It is wired at the VIRT_GPIO
+ * slot in the ACPI/GED configuration, where it backs the i2c-hid interrupt
+ * line (\_SB.GPO0), replacing the previous custom odp-gpio controller.
  */
-static void create_odp_gpio(const VirtMachineState *vms, MemoryRegion *mem)
+static void create_odp_pl061(const VirtMachineState *vms, MemoryRegion *mem)
 {
     char *nodename;
-    hwaddr base = vms->memmap[VIRT_ODP_GPIO].base;
-    hwaddr size = vms->memmap[VIRT_ODP_GPIO].size;
-    int irq = vms->irqmap[VIRT_ODP_GPIO];
-    DeviceState *dev = qdev_new(TYPE_ODP_GPIO);
+    hwaddr base = vms->memmap[VIRT_GPIO].base;
+    hwaddr size = vms->memmap[VIRT_GPIO].size;
+    int irq = vms->irqmap[VIRT_GPIO];
+    const char compat[] = "arm,pl061\0arm,primecell";
+    DeviceState *dev = qdev_new(TYPE_ODP_PL061);
     SysBusDevice *s = SYS_BUS_DEVICE(dev);
     MachineState *ms = MACHINE(vms);
-    Chardev *chr;
+    int i;
 
-    chr = qemu_chr_find("gpio0");
-    if (chr) {
-        qdev_prop_set_chr(dev, "gpio0", chr);
+    /* Pull lines down to 0 if not driven by a peer. */
+    qdev_prop_set_uint8(dev, "pullups", 0);
+    qdev_prop_set_uint8(dev, "pulldowns", 0xff);
+
+    /* Attach a per-line chardev backend ('-chardev socket,id=gpioN,...'). */
+    for (i = 0; i < 8; i++) {
+        g_autofree char *propname = g_strdup_printf("gpio%d", i);
+        Chardev *chr = qemu_chr_find(propname);
+
+        if (chr) {
+            qdev_prop_set_chr(dev, propname, chr);
+        }
     }
 
     sysbus_realize_and_unref(s, &error_fatal);
     memory_region_add_subregion(mem, base, sysbus_mmio_get_region(s, 0));
     sysbus_connect_irq(s, 0, qdev_get_gpio_in(vms->gic, irq));
 
-    nodename = g_strdup_printf("/gpio@%" PRIx64, base);
+    nodename = g_strdup_printf("/pl061@%" PRIx64, base);
     qemu_fdt_add_subnode(ms->fdt, nodename);
-    qemu_fdt_setprop_string(ms->fdt, nodename, "compatible", "odp,gpio");
     qemu_fdt_setprop_sized_cells(ms->fdt, nodename, "reg",
                                  2, base, 2, size);
+    qemu_fdt_setprop(ms->fdt, nodename, "compatible", compat, sizeof(compat));
+    qemu_fdt_setprop_cell(ms->fdt, nodename, "#gpio-cells", 2);
+    qemu_fdt_setprop(ms->fdt, nodename, "gpio-controller", NULL, 0);
     qemu_fdt_setprop_cells(ms->fdt, nodename, "interrupts",
                            gic_fdt_irq_type_spi(vms), irq,
                            GIC_FDT_IRQ_FLAGS_LEVEL_HI);
+    qemu_fdt_setprop_cell(ms->fdt, nodename, "clocks", vms->clock_phandle);
+    qemu_fdt_setprop_string(ms->fdt, nodename, "clock-names", "apb_pclk");
     g_free(nodename);
 }
 
@@ -3242,8 +3257,6 @@ static void machvirt_init(MachineState *machine)
 
     create_i2c(vms, sysmem);
 
-    create_odp_gpio(vms, sysmem);
-
     create_pcie(vms);
     create_cxl_host_reg_region(vms);
 
@@ -3252,6 +3265,12 @@ static void machvirt_init(MachineState *machine)
         vms->generic_error_notifier.notify = virt_generic_error_req;
         notifier_list_add(&acpi_generic_error_notifiers,
                           &vms->generic_error_notifier);
+        /*
+         * In the ACPI configuration the power button is owned by the GED, so
+         * no PL061 is created for it. Instantiate the socket-backed PL061 at
+         * the VIRT_GPIO slot so it backs the i2c-hid interrupt line (GPO0).
+         */
+        create_odp_pl061(vms, sysmem);
     } else {
         create_gpio_devices(vms, VIRT_GPIO, sysmem);
     }

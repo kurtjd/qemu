@@ -118,11 +118,11 @@ static void acpi_dsdt_add_i2c(Aml *scope, const MemMapEntry *i2c_memmap,
     aml_append(scope, dev);
 }
 
-static void acpi_dsdt_add_odp_gpio(Aml *scope, const MemMapEntry *gpio_memmap,
-                                   uint32_t gpio_irq)
+static void acpi_dsdt_add_gpio_bare(Aml *scope, const MemMapEntry *gpio_memmap,
+                                    uint32_t gpio_irq)
 {
-    Aml *dev = aml_device("GPO1");
-    aml_append(dev, aml_name_decl("_HID", aml_string("ODP0002")));
+    Aml *dev = aml_device("GPO0");
+    aml_append(dev, aml_name_decl("_HID", aml_string("ARMH0061")));
     aml_append(dev, aml_name_decl("_UID", aml_int(0)));
 
     Aml *crs = aml_resource_template();
@@ -175,7 +175,8 @@ static Aml *build_i2c_hid_dsm_method(uint16_t hid_desc_addr)
 /*
  * Declare the HID-over-I2C keyboard living in the EC.  It rides the
  * odp-i2c-controller (\_SB.I2C0) for data and is wired for "input report
- * ready" interrupts on pin 0 of the odp-gpio controller (\_SB.GPO1).
+ * ready" interrupts on pin 0 of the socket-backed PL061 controller
+ * (\_SB.GPO0).
  */
 static void acpi_dsdt_add_i2c_hid(Aml *scope)
 {
@@ -191,7 +192,7 @@ static void acpi_dsdt_add_i2c_hid(Aml *scope)
     aml_append(crs, aml_i2c_serial_bus_device(VIRT_I2C_HID_ADDR, "\\_SB.I2C0"));
     aml_append(crs, aml_gpio_int(AML_CONSUMER, AML_LEVEL, AML_ACTIVE_LOW,
                                  AML_EXCLUSIVE, AML_PULL_UP, 0,
-                                 &gpio_pin, 1, "\\_SB.GPO1", NULL, 0));
+                                 &gpio_pin, 1, "\\_SB.GPO0", NULL, 0));
     aml_append(dev, aml_name_decl("_CRS", crs));
 
     aml_append(dev, build_i2c_hid_dsm_method(VIRT_I2C_HID_DESC_ADDR));
@@ -1256,8 +1257,6 @@ build_dsdt(GArray *table_data, BIOSLinker *linker, VirtMachineState *vms)
     }
     acpi_dsdt_add_i2c(scope, &memmap[VIRT_I2C],
                       (irqmap[VIRT_I2C] + ARM_SPI_BASE));
-    acpi_dsdt_add_odp_gpio(scope, &memmap[VIRT_ODP_GPIO],
-                           (irqmap[VIRT_ODP_GPIO] + ARM_SPI_BASE));
     acpi_dsdt_add_i2c_hid(scope);
     if (vmc->acpi_expose_flash) {
         acpi_dsdt_add_flash(scope, &memmap[VIRT_FLASH]);
@@ -1272,6 +1271,13 @@ build_dsdt(GArray *table_data, BIOSLinker *linker, VirtMachineState *vms)
                       HOTPLUG_HANDLER(vms->acpi_dev),
                       irqmap[VIRT_ACPI_GED] + ARM_SPI_BASE, AML_SYSTEM_MEMORY,
                       memmap[VIRT_ACPI_GED].base);
+        /*
+         * The power button is handled by the GED, so the socket-backed PL061
+         * is exposed without the power-button _AEI/_E03; it only needs to back
+         * the i2c-hid "input report ready" interrupt line (GPO0 pin 0).
+         */
+        acpi_dsdt_add_gpio_bare(scope, &memmap[VIRT_GPIO],
+                                (irqmap[VIRT_GPIO] + ARM_SPI_BASE));
     } else {
         acpi_dsdt_add_gpio(scope, &memmap[VIRT_GPIO],
                            (irqmap[VIRT_GPIO] + ARM_SPI_BASE));
