@@ -100,7 +100,7 @@ static void acpi_dsdt_add_uart(Aml *scope, const MemMapEntry *uart_memmap,
     aml_append(scope, dev);
 }
 
-static void acpi_dsdt_add_i2c(Aml *scope, const MemMapEntry *i2c_memmap,
+/*static void acpi_dsdt_add_i2c(Aml *scope, const MemMapEntry *i2c_memmap,
                               uint32_t i2c_irq)
 {
     Aml *dev = aml_device("I2C0");
@@ -116,7 +116,7 @@ static void acpi_dsdt_add_i2c(Aml *scope, const MemMapEntry *i2c_memmap,
     aml_append(dev, aml_name_decl("_CRS", crs));
 
     aml_append(scope, dev);
-}
+}*/
 
 static void acpi_dsdt_add_gpio_bare(Aml *scope, const MemMapEntry *gpio_memmap,
                                     uint32_t gpio_irq)
@@ -178,7 +178,7 @@ static Aml *build_i2c_hid_dsm_method(uint16_t hid_desc_addr)
  * ready" interrupts on pin 0 of the socket-backed PL061 controller
  * (\_SB.GPO0).
  */
-static void acpi_dsdt_add_i2c_hid(Aml *scope)
+/*static void acpi_dsdt_add_i2c_hid(Aml *scope)
 {
     Aml *dev = aml_device("HIDK");
     Aml *crs;
@@ -198,7 +198,7 @@ static void acpi_dsdt_add_i2c_hid(Aml *scope)
     aml_append(dev, build_i2c_hid_dsm_method(VIRT_I2C_HID_DESC_ADDR));
 
     aml_append(scope, dev);
-}
+}*/
 
 static void acpi_dsdt_add_flash(Aml *scope, const MemMapEntry *flash_memmap)
 {
