@@ -1255,9 +1255,13 @@ build_dsdt(GArray *table_data, BIOSLinker *linker, VirtMachineState *vms)
         acpi_dsdt_add_uart(scope, &memmap[VIRT_UART1],
                            (irqmap[VIRT_UART1] + ARM_SPI_BASE), 1);
     }
-    acpi_dsdt_add_i2c(scope, &memmap[VIRT_I2C],
-                      (irqmap[VIRT_I2C] + ARM_SPI_BASE));
-    acpi_dsdt_add_i2c_hid(scope);
+
+    // Note: Causes conflicts
+    //
+    // acpi_dsdt_add_i2c(scope, &memmap[VIRT_I2C],
+    //                   (irqmap[VIRT_I2C] + ARM_SPI_BASE));
+    // acpi_dsdt_add_i2c_hid(scope);
+
     if (vmc->acpi_expose_flash) {
         acpi_dsdt_add_flash(scope, &memmap[VIRT_FLASH]);
     }
