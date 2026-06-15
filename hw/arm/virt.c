@@ -1619,7 +1619,7 @@ static void create_odp_i2c(const VirtMachineState *vms, MemoryRegion *mem)
  * ('-chardev socket,id=gpio0,...' for pin 0). The backends are optional: pins
  * without an attached chardev simply have no peer. It is wired at the VIRT_GPIO
  * slot in the ACPI/GED configuration, where it backs the i2c-hid interrupt
- * line (\_SB.GPO0), replacing the previous custom odp-gpio controller.
+ * line (\_SB.GPO0).
  */
 static void create_odp_pl061(const VirtMachineState *vms, MemoryRegion *mem)
 {
