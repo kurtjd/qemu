@@ -1633,9 +1633,14 @@ static void create_odp_pl061(const VirtMachineState *vms, MemoryRegion *mem)
     MachineState *ms = MACHINE(vms);
     int i;
 
-    /* Pull lines down to 0 if not driven by a peer. */
-    qdev_prop_set_uint8(dev, "pullups", 0);
-    qdev_prop_set_uint8(dev, "pulldowns", 0xff);
+    /*
+     * Pull lines down to 0 if not driven by a peer, except pin 0 which backs
+     * the active-low HID-over-I2C interrupt (\_SB.GPO0): it must idle high
+     * (deasserted) so the host doesn't see a spurious asserted interrupt
+     * before the EC connects and drives the line.
+     */
+    qdev_prop_set_uint8(dev, "pullups", 0x01);
+    qdev_prop_set_uint8(dev, "pulldowns", 0xfe);
 
     /* Attach a per-line chardev backend ('-chardev socket,id=gpioN,...'). */
     for (i = 0; i < 8; i++) {

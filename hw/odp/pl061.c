@@ -334,6 +334,18 @@ static void pl061_hold_reset(Object *obj, ResetType type)
         qemu_chr_fe_write_all(&s->chr[i], &level, 1);
     }
     s->old_out_data = pullups;
+
+    /*
+     * Seed the input data register from the pull-ups so an undriven input
+     * line reads its resting level until a peer drives it.  Without this an
+     * active-low, pulled-up interrupt line (e.g. the HID-over-I2C attention
+     * line on pin 0) would read 0 and appear permanently asserted the moment
+     * the guest unmasks it, before the peer EC ever connects and drives it
+     * high.  Keep old_in_data in sync so this resting level does not look
+     * like an input edge.
+     */
+    s->data |= pullups;
+    s->old_in_data = s->data;
 }
 
 /* ------------------------------------------------------------------ */
