@@ -100,7 +100,7 @@ static void acpi_dsdt_add_uart(Aml *scope, const MemMapEntry *uart_memmap,
     aml_append(scope, dev);
 }
 
-static void acpi_dsdt_add_gpio_bare(Aml *scope, const MemMapEntry *gpio_memmap,
+static void acpi_dsdt_add_odp_gpio(Aml *scope, const MemMapEntry *gpio_memmap,
                                     uint32_t gpio_irq)
 {
     Aml *dev = aml_device("GPO0");
@@ -1187,12 +1187,10 @@ build_dsdt(GArray *table_data, BIOSLinker *linker, VirtMachineState *vms)
                       HOTPLUG_HANDLER(vms->acpi_dev),
                       irqmap[VIRT_ACPI_GED] + ARM_SPI_BASE, AML_SYSTEM_MEMORY,
                       memmap[VIRT_ACPI_GED].base);
-        /*
-         * The power button is handled by the GED, so the socket-backed PL061
-         * is exposed without the power-button _AEI/_E03; it only needs to back
-         * the i2c-hid "input report ready" interrupt line (GPO0 pin 0).
-         */
-        acpi_dsdt_add_gpio_bare(scope, &memmap[VIRT_GPIO],
+
+        // Revisit: Do we actually need this? We don't need anything here for I2C,
+        // so might be something on the ACPI table side in UEFI?
+        acpi_dsdt_add_odp_gpio(scope, &memmap[VIRT_GPIO],
                                 (irqmap[VIRT_GPIO] + ARM_SPI_BASE));
     } else {
         acpi_dsdt_add_gpio(scope, &memmap[VIRT_GPIO],

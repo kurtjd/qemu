@@ -1580,7 +1580,7 @@ static void create_rtc(const VirtMachineState *vms)
  * '-chardev socket,id=ec-i2c-controller,...' the device still maps and simply
  * has no peer until one is attached.
  */
-static void create_i2c(const VirtMachineState *vms, MemoryRegion *mem)
+static void create_odp_i2c(const VirtMachineState *vms, MemoryRegion *mem)
 {
     char *nodename;
     hwaddr base = vms->memmap[VIRT_I2C].base;
@@ -3260,7 +3260,7 @@ static void machvirt_init(MachineState *machine)
 
     create_rtc(vms);
 
-    create_i2c(vms, sysmem);
+    create_odp_i2c(vms, sysmem);
 
     create_pcie(vms);
     create_cxl_host_reg_region(vms);
