@@ -49,9 +49,6 @@
 #include "hw/usb/xhci.h"
 #include "hw/char/pl011.h"
 #include "hw/watchdog/sbsa_gwdt.h"
-#include "hw/odp/i2c-controller.h"
-#include "hw/odp/gpio.h"
-#include "chardev/char.h"
 #include "net/net.h"
 #include "qobject/qlist.h"
 #include "qom/object.h"
@@ -99,8 +96,6 @@ enum {
     SBSA_SECURE_MEM,
     SBSA_AHCI,
     SBSA_XHCI,
-    SBSA_I2C,
-    SBSA_ODP_GPIO,
 };
 
 struct SBSAMachineState {
@@ -139,8 +134,6 @@ static const MemMapEntry sbsa_ref_memmap[] = {
     /* Space here reserved for more SMMUs */
     [SBSA_AHCI] =               { 0x60100000, 0x00010000 },
     [SBSA_XHCI] =               { 0x60110000, 0x00010000 },
-    [SBSA_I2C] =                { 0x60120000, 0x00001000 },
-    [SBSA_ODP_GPIO] =           { 0x60130000, 0x00001000 },
     /* Space here reserved for other devices */
     [SBSA_PCIE_PIO] =           { 0x7fff0000, 0x00010000 },
     /* 32-bit address PCIE MMIO space */
@@ -163,8 +156,6 @@ static const int sbsa_ref_irqmap[] = {
     [SBSA_XHCI] = 11,
     [SBSA_SMMU] = 12, /* ... to 15 */
     [SBSA_GWDT_WS0] = 16,
-    [SBSA_I2C] = 17,
-    [SBSA_ODP_GPIO] = 18,
 };
 
 static uint64_t sbsa_ref_cpu_mp_affinity(SBSAMachineState *sms, int idx)
@@ -549,59 +540,6 @@ static void create_rtc(const SBSAMachineState *sms)
     sysbus_create_simple("pl031", base, qdev_get_gpio_in(sms->gic, irq));
 }
 
-/*
- * Socket-backed I2C controller for talking to an external embedded controller
- * (EC). The chardev backend is optional and looked up by id
- * ('-chardev socket,id=ec-i2c-controller,...').
- *
- * Note: this only maps the device in the QEMU memory map. The sbsa-ref guest
- * discovers hardware via ACPI tables built by the external firmware
- * (TF-A/EDK2), so that firmware must also describe this device for a guest OS
- * to enumerate it.
- */
-static void create_i2c(const SBSAMachineState *sms)
-{
-    hwaddr base = sbsa_ref_memmap[SBSA_I2C].base;
-    int irq = sbsa_ref_irqmap[SBSA_I2C];
-    DeviceState *dev = qdev_new(TYPE_ODP_I2C_CONTROLLER);
-    SysBusDevice *s = SYS_BUS_DEVICE(dev);
-    Chardev *chr;
-
-    chr = qemu_chr_find("ec-i2c-controller");
-    if (chr) {
-        qdev_prop_set_chr(dev, "chardev", chr);
-    }
-
-    sysbus_realize_and_unref(s, &error_fatal);
-    sysbus_mmio_map(s, 0, base);
-    sysbus_connect_irq(s, 0, qdev_get_gpio_in(sms->gic, irq));
-}
-
-/*
- * Socket-backed bidirectional GPIO controller. Each pin is bridged to a peer
- * over its own chardev, looked up by id ('-chardev socket,id=gpio0,...' for
- * pin 0); the backend is optional. As with the I2C controller, the sbsa-ref
- * guest discovers hardware via ACPI tables built by the external firmware, so
- * that firmware must also describe this device for a guest OS to enumerate it.
- */
-static void create_odp_gpio(const SBSAMachineState *sms)
-{
-    hwaddr base = sbsa_ref_memmap[SBSA_ODP_GPIO].base;
-    int irq = sbsa_ref_irqmap[SBSA_ODP_GPIO];
-    DeviceState *dev = qdev_new(TYPE_ODP_GPIO);
-    SysBusDevice *s = SYS_BUS_DEVICE(dev);
-    Chardev *chr;
-
-    chr = qemu_chr_find("gpio0");
-    if (chr) {
-        qdev_prop_set_chr(dev, "gpio0", chr);
-    }
-
-    sysbus_realize_and_unref(s, &error_fatal);
-    sysbus_mmio_map(s, 0, base);
-    sysbus_connect_irq(s, 0, qdev_get_gpio_in(sms->gic, irq));
-}
-
 static void create_wdt(const SBSAMachineState *sms)
 {
     hwaddr rbase = sbsa_ref_memmap[SBSA_GWDT_REFRESH].base;
@@ -894,10 +832,6 @@ static void sbsa_ref_init(MachineState *machine)
     create_ahci(sms);
 
     create_xhci(sms);
-
-    create_i2c(sms);
-
-    create_odp_gpio(sms);
 
     create_pcie(sms, sysmem, secure_sysmem);
 
