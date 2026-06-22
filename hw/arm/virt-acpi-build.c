@@ -113,7 +113,8 @@ static void acpi_dsdt_add_odp_pl061(Aml *scope, const MemMapEntry *gpio_memmap,
     aml_append(scope, dev);
 }
 
-static void acpi_dsdt_add_odp_i2c(Aml *scope, const MemMapEntry *i2c_memmap)
+static void acpi_dsdt_add_odp_i2c(Aml *scope, const MemMapEntry *i2c_memmap,
+                                  uint32_t i2c_irq)
 {
     Aml *dev = aml_device("I2C0");
     aml_append(dev, aml_name_decl("_HID", aml_string("QEMU0001")));
@@ -122,6 +123,9 @@ static void acpi_dsdt_add_odp_i2c(Aml *scope, const MemMapEntry *i2c_memmap)
     Aml *crs = aml_resource_template();
     aml_append(crs, aml_memory32_fixed(i2c_memmap->base,
                                        i2c_memmap->size, AML_READ_WRITE));
+    aml_append(crs,
+               aml_interrupt(AML_CONSUMER, AML_LEVEL, AML_ACTIVE_HIGH,
+                             AML_EXCLUSIVE, &i2c_irq, 1));
     aml_append(dev, aml_name_decl("_CRS", crs));
 
     aml_append(scope, dev);
@@ -879,7 +883,8 @@ build_dsdt(GArray *table_data, BIOSLinker *linker, VirtMachineState *vms)
                       memmap[VIRT_ACPI_GED].base);
         acpi_dsdt_add_odp_pl061(scope, &memmap[VIRT_GPIO],
                                 (irqmap[VIRT_GPIO] + ARM_SPI_BASE));
-        acpi_dsdt_add_odp_i2c(scope, &memmap[VIRT_I2C]);
+        acpi_dsdt_add_odp_i2c(scope, &memmap[VIRT_I2C],
+                              (irqmap[VIRT_I2C] + ARM_SPI_BASE));
     } else {
         acpi_dsdt_add_gpio(scope, &memmap[VIRT_GPIO],
                            (irqmap[VIRT_GPIO] + ARM_SPI_BASE));
