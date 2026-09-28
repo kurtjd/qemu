@@ -1,0 +1,145 @@
+#ifndef HW_ODP_ESPI_PROTO_H
+#define HW_ODP_ESPI_PROTO_H
+
+#define ODP_ESPI_WIRE_DATA  0x00
+#define ODP_ESPI_WIRE_ALERT 0x01
+#define ODP_ESPI_WIRE_RESET 0x02
+
+#define ODP_ESPI_WIRE_RESET_DEASSERTED 0x00
+#define ODP_ESPI_WIRE_RESET_ASSERTED   0x01
+
+#define ODP_ESPI_CMD_PUT_PC            0x00
+#define ODP_ESPI_CMD_GET_PC            0x01
+#define ODP_ESPI_CMD_PUT_NP            0x02
+#define ODP_ESPI_CMD_PUT_VWIRE         0x04
+#define ODP_ESPI_CMD_GET_VWIRE         0x05
+#define ODP_ESPI_CMD_GET_CONFIGURATION 0x21
+#define ODP_ESPI_CMD_SET_CONFIGURATION 0x22
+#define ODP_ESPI_CMD_GET_STATUS        0x25
+
+#define ODP_ESPI_RSP_ACCEPT          0x08
+#define ODP_ESPI_RSP_DEFER           0x01
+#define ODP_ESPI_RSP_NON_FATAL_ERROR 0x02
+#define ODP_ESPI_RSP_FATAL_ERROR     0x03
+#define ODP_ESPI_RSP_WAIT_STATE      0x0f
+#define ODP_ESPI_RSP_NO_RESPONSE     0xff
+
+#define ODP_ESPI_STATUS_PC_FREE  (1U << 0)
+#define ODP_ESPI_STATUS_NP_FREE  (1U << 1)
+#define ODP_ESPI_STATUS_VWIRE_FREE (1U << 2)
+#define ODP_ESPI_STATUS_PC_AVAIL (1U << 4)
+#define ODP_ESPI_STATUS_NP_AVAIL (1U << 5)
+#define ODP_ESPI_STATUS_VWIRE_AVAIL (1U << 6)
+
+#define ODP_ESPI_VWIRE_COUNT_MASK 0x3f
+#define ODP_ESPI_VWIRE_MIN_COUNT  8
+#define ODP_ESPI_VWIRE_MAX_COUNT  64
+#define ODP_ESPI_VWIRE_GROUP_SIZE 2
+#define ODP_ESPI_VWIRE_MAX_PACKET_SIZE \
+    (1 + ODP_ESPI_VWIRE_GROUP_SIZE * ODP_ESPI_VWIRE_MAX_COUNT)
+#define ODP_ESPI_VWIRE_IRQ_LOW    0x00
+#define ODP_ESPI_VWIRE_IRQ_HIGH   0x01
+#define ODP_ESPI_VWIRE_IRQ_LEVEL  0x80
+#define ODP_ESPI_VWIRE_IRQ_MASK   0x7f
+#define ODP_ESPI_VWIRE_GPIO_BASE  0x80
+#define ODP_ESPI_VWIRE_VALID_SHIFT 4
+#define ODP_ESPI_VWIRE_LEVEL_MASK 0x0f
+
+#define ODP_ESPI_CYCLE_MEM_READ32          0x00
+#define ODP_ESPI_CYCLE_MEM_WRITE32         0x01
+#define ODP_ESPI_CYCLE_SUCCESS_DATA_MIDDLE 0x09
+#define ODP_ESPI_CYCLE_SUCCESS_DATA_FIRST  0x0b
+#define ODP_ESPI_CYCLE_SUCCESS_DATA_LAST   0x0d
+#define ODP_ESPI_CYCLE_SUCCESS_DATA_ONLY   0x0f
+#define ODP_ESPI_CYCLE_UNSUCCESSFUL_LAST   0x0c
+#define ODP_ESPI_CYCLE_UNSUCCESSFUL_ONLY   0x0e
+
+/*
+ * Native phase sizes exclude the socket wire kind. Packet offsets start at
+ * Cycle Type, after the command or response opcode (eSPI 1.6, section 4.1).
+ * Lengths and addresses are big-endian. Configuration data and status are
+ * little-endian; memory payload bytes remain in address order (section 5.1).
+ */
+#define ODP_ESPI_OPCODE_SIZE 1
+#define ODP_ESPI_STATUS_SIZE 2
+#define ODP_ESPI_CRC_SIZE    1
+
+#define ODP_ESPI_PACKET_CYCLE_OFFSET         0
+#define ODP_ESPI_PACKET_TAG_LENGTH_HI_OFFSET 1
+#define ODP_ESPI_PACKET_LENGTH_LO_OFFSET     2
+#define ODP_ESPI_PACKET_HEADER_SIZE          3
+
+#define ODP_ESPI_PACKET_TAG_SHIFT       4
+#define ODP_ESPI_PACKET_TAG_MASK        0xf0
+#define ODP_ESPI_PACKET_LENGTH_HI_SHIFT 8
+#define ODP_ESPI_PACKET_LENGTH_HI_MASK  0x0f
+#define ODP_ESPI_PACKET_LENGTH_MASK     0x0fff
+#define ODP_ESPI_PACKET_LENGTH_MAX      4096
+
+/*
+ * A zero length encodes 4096 bytes for memory requests and data completions.
+ * Reads specify bytes requested; writes/data completions specify bytes present.
+ * Completions without data encode zero and ignore the received length field.
+ */
+#define ODP_ESPI_MEM32_ADDR_OFFSET ODP_ESPI_PACKET_HEADER_SIZE
+#define ODP_ESPI_MEM32_ADDR_SIZE   4
+#define ODP_ESPI_MEM32_HEADER_SIZE \
+    (ODP_ESPI_PACKET_HEADER_SIZE + ODP_ESPI_MEM32_ADDR_SIZE)
+#define ODP_ESPI_MEM32_DATA_OFFSET      ODP_ESPI_MEM32_HEADER_SIZE
+#define ODP_ESPI_COMPLETION_DATA_OFFSET ODP_ESPI_PACKET_HEADER_SIZE
+
+#define ODP_ESPI_CONFIG_ADDRESS_SIZE 2
+#define ODP_ESPI_CONFIG_VALUE_SIZE   4
+#define ODP_ESPI_CONFIG_SPACE_SIZE   0x1000
+
+/* Native target configuration registers, not frontend MMIO (section 6.2.1). */
+#define ODP_ESPI_CONFIG_DEVICE_ID 0x0004
+#define ODP_ESPI_CONFIG_GENERAL   0x0008
+#define ODP_ESPI_CONFIG_CH0       0x0010
+#define ODP_ESPI_CONFIG_CH1       0x0020
+
+#define ODP_ESPI_DEVICE_ID_VERSION_MASK 0xff
+#define ODP_ESPI_DEVICE_ID_VERSION      0x01
+
+#define ODP_ESPI_GENERAL_CHANNELS_MASK      0xff
+#define ODP_ESPI_GENERAL_CHANNEL0_SUPPORTED (1U << 0)
+#define ODP_ESPI_GENERAL_CHANNEL1_SUPPORTED (1U << 1)
+#define ODP_ESPI_GENERAL_CRC_ENABLE         (1U << 31)
+
+#define ODP_ESPI_CH0_ENABLE            (1U << 0)
+#define ODP_ESPI_CH0_READY             (1U << 1)
+#define ODP_ESPI_CH0_BUS_MASTER_ENABLE (1U << 2)
+
+#define ODP_ESPI_CH0_MAX_PAYLOAD_SUPPORTED_SHIFT 4
+#define ODP_ESPI_CH0_MAX_PAYLOAD_SUPPORTED_MASK \
+    (7U << ODP_ESPI_CH0_MAX_PAYLOAD_SUPPORTED_SHIFT)
+#define ODP_ESPI_CH0_MAX_PAYLOAD_SELECTED_SHIFT 8
+#define ODP_ESPI_CH0_MAX_PAYLOAD_SELECTED_MASK \
+    (7U << ODP_ESPI_CH0_MAX_PAYLOAD_SELECTED_SHIFT)
+#define ODP_ESPI_CH0_MAX_READ_REQUEST_SHIFT 12
+#define ODP_ESPI_CH0_MAX_READ_REQUEST_MASK \
+    (7U << ODP_ESPI_CH0_MAX_READ_REQUEST_SHIFT)
+
+#define ODP_ESPI_CH1_ENABLE (1U << 0)
+#define ODP_ESPI_CH1_READY  (1U << 1)
+#define ODP_ESPI_CH1_MAX_COUNT_SUPPORTED_SHIFT 8
+#define ODP_ESPI_CH1_MAX_COUNT_SUPPORTED_MASK \
+    (ODP_ESPI_VWIRE_COUNT_MASK << ODP_ESPI_CH1_MAX_COUNT_SUPPORTED_SHIFT)
+#define ODP_ESPI_CH1_MAX_COUNT_SELECTED_SHIFT 16
+#define ODP_ESPI_CH1_MAX_COUNT_SELECTED_MASK \
+    (ODP_ESPI_VWIRE_COUNT_MASK << ODP_ESPI_CH1_MAX_COUNT_SELECTED_SHIFT)
+
+/* Payload sizes use codes 1-3; read request sizes use codes 1-7. */
+#define ODP_ESPI_SIZE_64B_CODE   0x1
+#define ODP_ESPI_SIZE_128B_CODE  0x2
+#define ODP_ESPI_SIZE_256B_CODE  0x3
+#define ODP_ESPI_SIZE_512B_CODE  0x4
+#define ODP_ESPI_SIZE_1024B_CODE 0x5
+#define ODP_ESPI_SIZE_2048B_CODE 0x6
+#define ODP_ESPI_SIZE_4096B_CODE 0x7
+
+/* CRC excludes the wire kind and WAIT_STATE response bytes (section 5.2). */
+#define ODP_ESPI_CRC8_POLYNOMIAL 0x07
+#define ODP_ESPI_CRC8_INIT       0x00
+
+#endif

@@ -915,6 +915,61 @@ build_dsdt(GArray *table_data, BIOSLinker *linker, VirtMachineState *vms)
     free_aml_allocator();
 }
 
+static void build_pcct(GArray *table_data, BIOSLinker *linker,
+                       VirtMachineState *vms)
+{
+    AcpiTable table = { .sig = "PCCT", .rev = 2, .oem_id = vms->oem_id,
+                       .oem_table_id = vms->oem_table_id };
+    uint32_t irq = vms->irqmap[VIRT_ESPI] + ARM_SPI_BASE;
+    unsigned channel;
+
+    acpi_table_begin(&table, table_data);
+    build_append_int_noprefix(table_data, 1, 4);
+    build_append_int_noprefix(table_data, 0, 8);
+
+    for (channel = 0; channel < 2; channel++) {
+        uint64_t shared_base = 0x090f0000 + channel * 0x10000;
+        uint64_t control_base = 0x09110000 + channel * 0x20;
+        unsigned subspace_start = table_data->len;
+        bool initiator = channel == 0;
+
+        build_append_int_noprefix(table_data, channel + 3, 1);
+        build_append_int_noprefix(table_data, 164, 1);
+    build_append_int_noprefix(table_data, irq + channel, 4);
+        build_append_int_noprefix(table_data, 0, 1);
+        build_append_int_noprefix(table_data, 0, 1);
+        build_append_int_noprefix(table_data, shared_base, 8);
+        build_append_int_noprefix(table_data, 4096, 4);
+        build_append_gas(table_data, AML_AS_SYSTEM_MEMORY, 32, 0, 3,
+                         control_base + 0x04);
+        build_append_int_noprefix(table_data, 0, 8);
+        build_append_int_noprefix(table_data, 1, 8);
+        build_append_int_noprefix(table_data, initiator ? 100000 : 0, 4);
+        build_append_int_noprefix(table_data, 0, 4);
+        build_append_int_noprefix(table_data, 0, 4);
+        build_append_gas(table_data, AML_AS_SYSTEM_MEMORY, 32, 0, 3,
+                         control_base + 0x0c);
+        build_append_int_noprefix(table_data, 0, 8);
+        build_append_int_noprefix(table_data, 1, 8);
+        build_append_int_noprefix(table_data, 0, 8);
+        build_append_gas(table_data, AML_AS_SYSTEM_MEMORY, 32, 0, 3,
+                         control_base);
+        build_append_int_noprefix(table_data, 1, 8);
+        build_append_gas(table_data, AML_AS_SYSTEM_MEMORY, 32, 0, 3,
+                         control_base);
+        build_append_int_noprefix(table_data, 0xfffffffe, 8);
+        build_append_int_noprefix(table_data, initiator ? 0 : 1, 8);
+        build_append_gas(table_data, AML_AS_SYSTEM_MEMORY, initiator ? 32 : 0,
+                         0, initiator ? 3 : 0, initiator ? control_base : 0);
+        build_append_int_noprefix(table_data, initiator ? 2 : 0, 8);
+
+        g_assert(table_data->len - subspace_start == 164);
+    }
+
+    g_assert(table_data->len - table.table_offset == 376);
+    acpi_table_end(linker, &table);
+}
+
 typedef
 struct AcpiBuildState {
     /* Copy of table in RAM (for patching). */
@@ -1032,6 +1087,9 @@ void virt_acpi_build(VirtMachineState *vms, AcpiBuildTables *tables)
         build_viot(ms, tables_blob, tables->linker, vms->virtio_iommu_bdf,
                    vms->oem_id, vms->oem_table_id);
     }
+
+    acpi_add_table(table_offsets, tables_blob);
+    build_pcct(tables_blob, tables->linker, vms);
 
     /* XSDT is pointed to by RSDP */
     xsdt = tables_blob->len;

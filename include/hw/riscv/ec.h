@@ -29,6 +29,7 @@ struct RISCVECState {
     DeviceState *i2c0;
     DeviceState *i2c_target;
     DeviceState *gpio0;
+    DeviceState *espi_target;
     const MemMapEntry *memmap;
     Notifier machine_done;
 };
@@ -40,6 +41,9 @@ enum {
     EC_I2C0,
     EC_I2C_TARGET,
     EC_GPIO,
+    EC_ESPI_TARGET,
+    EC_ESPI_MAILBOX0,
+    EC_ESPI_MAILBOX1,
     EC_RAM,
 };
 
@@ -48,6 +52,7 @@ enum {
     EC_I2C0_IRQ = 2,
     EC_I2C_TARGET_IRQ = 3,
     EC_GPIO_IRQ = 4,
+    EC_ESPI_TARGET_IRQ = 5,
 };
 
 #define EC_IRQCHIP_NUM_SOURCES  32

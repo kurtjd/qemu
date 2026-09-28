@@ -25,6 +25,7 @@
 #include "hw/odp/i2c-controller.h"
 #include "hw/odp/i2c-target.h"
 #include "hw/odp/gpio.h"
+#include "hw/odp/espi-target.h"
 #include "chardev/char.h"
 #include "system/system.h"
 #include "elf.h"
@@ -36,6 +37,9 @@ static const MemMapEntry ec_memmap[] = {
     [EC_I2C0]  = { 0x10001000,       0x1000 },
     [EC_I2C_TARGET] = { 0x10002000,  0x1000 },
     [EC_GPIO]  = { 0x10003000,       0x1000 },
+    [EC_ESPI_TARGET] = { 0x10004000, 0x1000 },
+    [EC_ESPI_MAILBOX0] = { 0x10005000, 0x1000 },
+    [EC_ESPI_MAILBOX1] = { 0x10006000, 0x1000 },
     [EC_RAM]   = { 0x80000000,          0x0 },
 };
 
@@ -211,6 +215,23 @@ static void ec_machine_init(MachineState *machine)
     sysbus_mmio_map(SYS_BUS_DEVICE(s->gpio0), 0, s->memmap[EC_GPIO].base);
     sysbus_connect_irq(SYS_BUS_DEVICE(s->gpio0), 0,
                        qdev_get_gpio_in(s->plic, EC_GPIO_IRQ));
+
+    s->espi_target = qdev_new(TYPE_ODP_ESPI_TARGET);
+    {
+        Chardev *espi_chr = qemu_chr_find("ec-espi-target");
+        if (espi_chr) {
+            qdev_prop_set_chr(s->espi_target, "chardev", espi_chr);
+        }
+    }
+    sysbus_realize_and_unref(SYS_BUS_DEVICE(s->espi_target), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(s->espi_target), 0,
+                    s->memmap[EC_ESPI_TARGET].base);
+    sysbus_mmio_map(SYS_BUS_DEVICE(s->espi_target), 1,
+                    s->memmap[EC_ESPI_MAILBOX0].base);
+    sysbus_mmio_map(SYS_BUS_DEVICE(s->espi_target), 2,
+                    s->memmap[EC_ESPI_MAILBOX1].base);
+    sysbus_connect_irq(SYS_BUS_DEVICE(s->espi_target), 0,
+                       qdev_get_gpio_in(s->plic, EC_ESPI_TARGET_IRQ));
 
     /* Firmware loading happens in machine_done */
     s->machine_done.notify = ec_machine_done;

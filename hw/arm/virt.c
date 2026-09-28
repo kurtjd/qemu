@@ -87,6 +87,7 @@
 #include "hw/virtio/virtio-iommu.h"
 #include "hw/char/pl011.h"
 #include "hw/odp/i2c-controller.h"
+#include "hw/odp/espi-controller.h"
 #include "hw/odp/pl061.h"
 #include "chardev/char.h"
 #include "qemu/guest-random.h"
@@ -237,6 +238,7 @@ static const int a15irqmap[] = {
     [VIRT_UART1] = 8,
     [VIRT_ACPI_GED] = 9,
     [VIRT_I2C] = 10,
+    [VIRT_ESPI] = 11,
     [VIRT_MMIO] = 16, /* ...to 16 + NUM_VIRTIO_TRANSPORTS - 1 */
     [VIRT_GIC_V2M] = 48, /* ...to 48 + NUM_GICV2M_SPIS - 1 */
     [VIRT_SMMU] = 74,    /* ...to 74 + NUM_SMMU_IRQS - 1 */
@@ -1049,6 +1051,26 @@ static void create_odp_i2c(const VirtMachineState *vms, MemoryRegion *mem)
                            GIC_FDT_IRQ_TYPE_SPI, irq,
                            GIC_FDT_IRQ_FLAGS_LEVEL_HI);
     g_free(nodename);
+}
+
+static void create_odp_espi(const VirtMachineState *vms)
+{
+    int irq = vms->irqmap[VIRT_ESPI];
+    unsigned index;
+    DeviceState *dev = qdev_new(TYPE_ODP_ESPI_CONTROLLER);
+    SysBusDevice *busdev = SYS_BUS_DEVICE(dev);
+    Chardev *chr;
+
+    chr = qemu_chr_find("ec-espi-controller");
+    if (chr) {
+        qdev_prop_set_chr(dev, "chardev", chr);
+    }
+
+    sysbus_realize_and_unref(busdev, &error_fatal);
+    for (index = 0; index < ODP_ESPI_IRQ_COUNT; index++) {
+        sysbus_connect_irq(busdev, index,
+                           qdev_get_gpio_in(vms->gic, irq + index));
+    }
 }
 
 /*
@@ -2514,6 +2536,7 @@ static void machvirt_init(MachineState *machine)
     create_rtc(vms);
 
     create_odp_i2c(vms, sysmem);
+    create_odp_espi(vms);
 
     create_pcie(vms);
 
